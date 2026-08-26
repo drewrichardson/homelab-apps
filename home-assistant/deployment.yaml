@@ -20,11 +20,8 @@ spec:
       # changes on every reschedule.
       nodeSelector:
         kubernetes.io/hostname: greyskull-1
-      # TEMP diagnostic: hostNetwork disabled to test whether the boot
-      # freeze is related to this node's large veth interface list. Revert
-      # once confirmed either way -- see homelab-apps README/session notes.
-      # hostNetwork: true
-      # dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       # The migrated Matter integration config points at the old HAOS
       # add-on's internal hostname. Matter Server now runs on this same
       # node via hostNetwork, so localhost is correct -- this alias just
@@ -38,7 +35,7 @@ spec:
             - core-matter-server
       containers:
         - name: home-assistant
-          image: homeassistant/home-assistant:2026.7.4 # TEMP: testing if 2026.8.2 has a boot-hang regression
+          image: homeassistant/home-assistant:2026.8.3 # 2026.8.2 has a confirmed boot-hang bug; this patch release fixes it while staying storage-compatible
           env:
             - name: TZ
               value: America/Denver
