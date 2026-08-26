@@ -41,6 +41,38 @@ time. Lesson: when a diagnostic result conflicts with other evidence (here, late
 returning real content from a pod that the same script called "frozen"), verify the diagnostic itself
 before trusting hours of results built on it.
 
+### kube-prometheus-stack (Prometheus + Grafana + node-exporter)
+Grafana at `http://grafana` via Traefik ingress (k3s ships Traefik by default). node-exporter's
+`hwmon` collector is explicitly enabled for hardware sensor metrics (CPU temperature) -- needs
+`lm-sensors` + the `coretemp` kernel module on the host, handled by the Ansible bootstrap playbook
+in the `homelab` repo. A "NUC Hardware" dashboard is auto-provisioned via a ConfigMap (see
+`monitoring-dashboards/`) using real thresholds pulled from the CPU's own reported critical
+temperature, not guessed values.
+
+**Two real bugs hit getting this running, worth keeping as reference:**
+
+1. **CRDs stuck permanently OutOfSync -> Prometheus pod never existed.** This chart's CRDs
+   (`Prometheus`, `Alertmanager` especially) are large enough to exceed the size limit on
+   `kubectl apply`'s client-side `last-applied-configuration` annotation, which is what ArgoCD's
+   default sync strategy uses. They silently never applied -- `kubectl get prometheus` errored "the
+   server doesn't have a resource type," meaning the whole monitoring stack looked like it deployed
+   (Grafana, node-exporter, kube-state-metrics all came up fine) while its actual data source never
+   existed. Fixed by adding `ServerSideApply=true` to this Application's `syncOptions` (doesn't use
+   that annotation, no size limit) -- see `apps/kube-prometheus-stack.yaml`.
+
+2. **The Prometheus Operator caches CRD availability at startup and never rechecks.** Even after the
+   CRDs above were force-applied to unblock the immediate outage, the operator (already running,
+   started before the CRDs existed) had logged `resource "prometheuses" ... not installed in the
+   cluster` at boot and simply never watched that resource type again. Fix: restart the operator
+   pod any time CRDs are added/fixed out from under it --
+   `kubectl rollout restart deployment kube-prometheus-stack-operator -n monitoring`.
+
+**Also expected, not a bug**: this Application will show `OutOfSync`/`Degraded` in ArgoCD as long as
+greyskull-2/3 are offline. Its sync operation waits for the node-exporter DaemonSet to be fully
+healthy before proceeding to later resources in the same sync wave, and a DaemonSet with pods
+`Pending` on offline nodes never reaches that state. Self-resolves once those nodes are back --
+no action needed.
+
 ## Bootstrapping onto a fresh cluster
 ```
 kubectl apply -f bootstrap/app-of-apps.yaml
