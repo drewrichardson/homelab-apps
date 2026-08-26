@@ -1,0 +1,156 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nuc-hardware-dashboard
+  namespace: monitoring
+  labels:
+    # Grafana's sidecar (bundled in kube-prometheus-stack) watches for this
+    # label and auto-imports any ConfigMap carrying it -- no manual import,
+    # no UI clicking, survives redeploys.
+    grafana_dashboard: "1"
+data:
+  nuc-hardware.json: |
+    {
+      "title": "NUC Hardware",
+      "uid": "nuc-hardware",
+      "tags": ["homelab", "hardware"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "instance",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "query": "label_values(node_hwmon_temp_celsius, instance)",
+            "multi": true,
+            "includeAll": true,
+            "current": { "text": "All", "value": "$__all" }
+          }
+        ]
+      },
+      "__inputs": [
+        {
+          "name": "DS_PROMETHEUS",
+          "type": "datasource",
+          "pluginId": "prometheus"
+        }
+      ],
+      "panels": [
+        {
+          "id": 1,
+          "type": "row",
+          "title": "CPU Temperature",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+        },
+        {
+          "id": 2,
+          "type": "gauge",
+          "title": "CPU Package Temp (current)",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "min": 0,
+              "max": 105,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "CPU Package + Core Temps Over Time",
+          "gridPos": { "h": 8, "w": 16, "x": 8, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\"} * on(instance,chip,sensor) group_left(label) node_hwmon_sensor_label{instance=~\"$instance\",chip=\"platform_coretemp_0\"}",
+              "legendFormat": "{{instance}} - {{label}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "row",
+          "title": "Chassis / Thermal Zones",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Thermal Zone Sensors Over Time",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"thermal.*\"}",
+              "legendFormat": "{{instance}} - {{chip}} {{sensor}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 6,
+          "type": "row",
+          "title": "Critical-Temp Alarms",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Any Sensor Over Critical Threshold?",
+          "description": "1 = a sensor has hit its critical temperature. Should always read 0.",
+          "gridPos": { "h": 4, "w": 24, "x": 0, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "max(node_hwmon_temp_crit_alarm_celsius{instance=~\"$instance\"})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        }
+      ]
+    }
