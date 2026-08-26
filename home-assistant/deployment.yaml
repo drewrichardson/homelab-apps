@@ -38,7 +38,7 @@ spec:
             - core-matter-server
       containers:
         - name: home-assistant
-          image: homeassistant/home-assistant:2026.8.2
+          image: homeassistant/home-assistant:2026.7.4 # TEMP: testing if 2026.8.2 has a boot-hang regression
           env:
             - name: TZ
               value: America/Denver
