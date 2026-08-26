@@ -24,7 +24,7 @@ data:
           {
             "name": "instance",
             "type": "query",
-            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
             "query": "label_values(node_hwmon_temp_celsius, instance)",
             "multi": true,
             "includeAll": true,
@@ -32,13 +32,6 @@ data:
           }
         ]
       },
-      "__inputs": [
-        {
-          "name": "DS_PROMETHEUS",
-          "type": "datasource",
-          "pluginId": "prometheus"
-        }
-      ],
       "panels": [
         {
           "id": 1,
@@ -51,7 +44,7 @@ data:
           "type": "gauge",
           "title": "CPU Package Temp (current)",
           "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\",sensor=\"temp1\"}",
@@ -80,7 +73,7 @@ data:
           "type": "timeseries",
           "title": "CPU Package + Core Temps Over Time",
           "gridPos": { "h": 8, "w": 16, "x": 8, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=\"platform_coretemp_0\"} * on(instance,chip,sensor) group_left(label) node_hwmon_sensor_label{instance=~\"$instance\",chip=\"platform_coretemp_0\"}",
@@ -106,7 +99,7 @@ data:
           "type": "timeseries",
           "title": "Thermal Zone Sensors Over Time",
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "node_hwmon_temp_celsius{instance=~\"$instance\",chip=~\"thermal.*\"}",
@@ -133,7 +126,7 @@ data:
           "title": "Any Sensor Over Critical Threshold?",
           "description": "1 = a sensor has hit its critical temperature. Should always read 0.",
           "gridPos": { "h": 4, "w": 24, "x": 0, "y": 19 },
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
               "expr": "max(node_hwmon_temp_crit_alarm_celsius{instance=~\"$instance\"})"
