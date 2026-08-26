@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: home-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: home-assistant
+  template:
+    metadata:
+      labels:
+        app: home-assistant
+    spec:
+      # Pinned to one node on purpose: hostNetwork means this pod's network
+      # identity IS the node's -- letting it float between nodes would mean
+      # its IP (and anything relying on mDNS discovery/local integrations)
+      # changes on every reschedule.
+      nodeSelector:
+        kubernetes.io/hostname: greyskull-1
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # The migrated Matter integration config points at the old HAOS
+      # add-on's internal hostname. Matter Server now runs on this same
+      # node via hostNetwork, so localhost is correct -- this alias just
+      # makes the old hostname resolve there too. Note: the integration is
+      # also flagged use_addon: true from the old install, which may still
+      # need to be removed and re-added via the UI pointing at
+      # ws://localhost:5580/ws as a standalone connection.
+      hostAliases:
+        - ip: "127.0.0.1"
+          hostnames:
+            - core-matter-server
+      containers:
+        - name: home-assistant
+          image: homeassistant/home-assistant:2026.8.2
+          env:
+            - name: TZ
+              value: America/Denver
+          ports:
+            - containerPort: 8123
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: home-assistant-config
