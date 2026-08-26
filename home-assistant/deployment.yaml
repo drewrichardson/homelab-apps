@@ -35,7 +35,7 @@ spec:
             - core-matter-server
       containers:
         - name: home-assistant
-          image: homeassistant/home-assistant:2026.8.0 # TEMP: bisecting which 2026.8.x release introduced the boot-hang bug
+          image: homeassistant/home-assistant:2026.8.2
           env:
             - name: TZ
               value: America/Denver
