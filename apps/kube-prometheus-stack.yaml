@@ -49,3 +49,12 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      # This chart's CRDs (Prometheus, Alertmanager especially) are huge --
+      # large enough to exceed the size limit on kubectl's client-side
+      # last-applied-configuration annotation, which is what ArgoCD's
+      # default apply strategy uses. They silently got stuck permanently
+      # OutOfSync as a result (confirmed: kubectl get prometheus errored
+      # "the server doesn't have a resource type", and the Prometheus pod
+      # never got created at all). Server-side apply doesn't use that
+      # annotation, so it doesn't hit the limit.
+      - ServerSideApply=true
