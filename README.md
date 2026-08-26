@@ -8,7 +8,7 @@ faster, less careful cadence (app config, image bumps) than cluster bootstrap do
 - `bootstrap/app-of-apps.yaml` -- applied **once, manually**, via `kubectl apply -f`. Everything
   after that, ArgoCD manages by watching `apps/` in this same repo.
 - `apps/` -- one ArgoCD `Application` per app, each pointing at that app's own directory here.
-- `home-assistant/`, `matter-server/` -- the actual Kubernetes manifests per app.
+- `home-assistant/` -- the actual Kubernetes manifests per app.
 
 ## Apps
 
@@ -24,12 +24,22 @@ container image. Notable choices:
   `ReadWriteOnce` volume, so a rolling update would try to start the replacement before killing the
   original and collide on both.
 - Lost with the move off HAOS: the Supervisor and its add-on store. Only two add-ons were in use --
-  Matter Server (now its own Deployment here) and Terminal & SSH (not needed; `kubectl exec` covers
-  it).
+  Matter Server (not currently deployed here -- wasn't actually in use, removed during migration; the
+  stored Matter integration config still points at the old add-on hostname if it's ever added back)
+  and Terminal & SSH (not needed; `kubectl exec` covers it).
+- Known follow-ups from the migration, not yet done: sign back into Home Assistant Cloud (Nabu Casa)
+  fresh via the UI -- the migrated config carried over some HAOS-specific assumptions that may need
+  re-establishing; remove the now-permanently-broken `rpi_power` integration (Pi-specific hardware
+  check, inapplicable off a Pi) via the UI.
 
-### Matter Server
-Standalone `python-matter-server` container replacing the HAOS add-on. Same node as Home Assistant
-on purpose (Matter commissioning needs mDNS on the real LAN, and both already require `hostNetwork`).
+**A debugging note worth keeping**: mid-migration this looked like a genuine Home Assistant boot-hang
+bug in image `2026.8.2` -- the HTTP server never came up, across many restarts, with every integration
+disabled, with and without `hostNetwork`, across multiple image versions. Real root cause: a flawed
+`pgrep`-based PID lookup in the diagnostic script used to check whether the process was still making
+progress, which produced false "0% CPU, frozen" readings. `2026.8.2` was working correctly the entire
+time. Lesson: when a diagnostic result conflicts with other evidence (here, later confirmed by `curl`
+returning real content from a pod that the same script called "frozen"), verify the diagnostic itself
+before trusting hours of results built on it.
 
 ## Bootstrapping onto a fresh cluster
 ```
