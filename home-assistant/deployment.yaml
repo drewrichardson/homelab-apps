@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: home-assistant
 spec:
-  replicas: 1
+  replicas: 0 # TEMP: scaled down for initial data migration, see README
   strategy:
     type: Recreate
   selector:
