@@ -39,6 +39,15 @@ spec:
           env:
             - name: TZ
               value: America/Denver
+          # NET_ADMIN/NET_RAW: required for Bluetooth adapter management.
+          # This alone doesn't guarantee full BT functionality -- it may
+          # also need the host's D-Bus/BlueZ socket mounted in, which isn't
+          # set up yet. Revisit if BT-dependent entities show as unavailable.
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN
+                - NET_RAW
           ports:
             - containerPort: 8123
           volumeMounts:
