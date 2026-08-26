@@ -35,7 +35,7 @@ spec:
             - core-matter-server
       containers:
         - name: home-assistant
-          image: homeassistant/home-assistant:2026.7.4 # 2026.8.x (Python 3.14 base) has a confirmed boot-hang bug; pinned older until upstream fixes it
+          image: homeassistant/home-assistant:2026.8.0 # TEMP: bisecting which 2026.8.x release introduced the boot-hang bug
           env:
             - name: TZ
               value: America/Denver
