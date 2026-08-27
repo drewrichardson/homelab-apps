@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minio
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.min.io/
+    chart: minio
+    targetRevision: 5.4.0
+    helm:
+      values: |
+        # rootUser/rootPassword deliberately left unset -- the chart
+        # auto-generates secure random credentials into its own Secret
+        # rather than anything living in this values block or git. Same
+        # pattern used for Grafana's admin password.
+        mode: standalone
+
+        persistence:
+          enabled: true
+          storageClass: local-path
+          size: 20Gi
+
+        resources:
+          requests:
+            memory: 512Mi
+
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - minio
+
+        consoleIngress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - minio-console
+
+        # This node is the only one guaranteed online; state storage needs
+        # to be reliably reachable, same reasoning as Home Assistant's
+        # node pinning earlier.
+        nodeSelector:
+          kubernetes.io/hostname: greyskull-1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: minio
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
