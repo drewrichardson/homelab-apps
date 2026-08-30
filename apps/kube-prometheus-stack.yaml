@@ -12,6 +12,15 @@ spec:
     helm:
       values: |
         grafana:
+          # Pinned via a SealedSecret (kube-prometheus-stack-secrets app)
+          # instead of the chart's auto-generated password -- that password
+          # was silently rotating on every ArgoCD sync, because the chart's
+          # random-password template renders a different value every
+          # comparison and selfHeal "corrected" the apparent drift each time.
+          admin:
+            existingSecret: grafana-admin-credentials
+            userKey: admin-user
+            passwordKey: admin-password
           ingress:
             enabled: true
             ingressClassName: traefik
