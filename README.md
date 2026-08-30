@@ -73,6 +73,42 @@ healthy before proceeding to later resources in the same sync wave, and a Daemon
 `Pending` on offline nodes never reaches that state. Self-resolves once those nodes are back --
 no action needed.
 
+### OpenLDAP + Keycloak (SSO -- phase 1, directory + IdP only)
+Goal: one identity for ArgoCD, Grafana, and SSH to all three NUCs. That needs two pieces, not one --
+Keycloak alone (its bundled Postgres is just Keycloak's own storage) has no LDAP server interface for
+anything else to bind against, and SSH doesn't speak OIDC. So:
+1. **OpenLDAP** (`jp-gouin/helm-openldap` community chart -- Bitnami dropped their own openldap chart
+   from the catalog) is the actual directory, source of truth for accounts.
+2. **Keycloak** (bitnami/keycloak + bundled Postgres) federates to that LDAP and is what ArgoCD/Grafana
+   will authenticate against via OIDC.
+3. SSSD/PAM on each NUC will authenticate SSH directly against the same LDAP.
+
+This phase deploys and verifies **only #1 and #2** -- directory up, one test user seeded, Keycloak
+console reachable. ArgoCD/Grafana OIDC wiring and the NUC SSSD/PAM piece (Ansible) are deliberately
+separate follow-ups, not done here.
+
+Base DN `dc=homelab,dc=local`. Both charts have credentials pinned via a SealedSecret
+(`openldap-secrets`/`keycloak-secrets` apps) from the start, rather than letting either chart
+auto-generate its own -- Grafana and MinIO both had their generated passwords silently rotate on
+every ArgoCD sync (selfHeal "correcting" the chart's own random-password template re-rendering
+differently each comparison), and this sidesteps that class of bug entirely instead of discovering it
+again later.
+
+`apps/openldap.yaml` seeds `ou=people`, `ou=groups`, and one `testuser` account (with
+`posixAccount`/`posixGroup` attributes already in place for the later SSSD phase) via
+`customLdifFiles`. That LDIF is a plain ConfigMap, not sealed, so it intentionally carries no
+`userPassword` -- set one after deploy with `ldappasswd`, the same pattern already used for ArgoCD's
+own initial admin password (fetched once via `kubectl`, never stored in git).
+
+Both LDAP and Keycloak run plaintext (no TLS) -- traffic stays inside the cluster network, same risk
+posture already accepted for Grafana/MinIO's ingress. Worth revisiting before SSSD is wired up on the
+NUCs, since that traffic would be leaving the cluster.
+
+**One gotcha caught before it shipped**: the openldap chart defaults `replication.enabled: true`
+regardless of `replicaCount`. At `replicaCount: 1` that renders a syncrepl config with the pod
+pointed at itself (confirmed via `helm template` -- `LDAP_REPLICATION_HOSTS` listed only the pod's
+own headless DNS name). Explicitly disabled since there's nothing to replicate to.
+
 ## Bootstrapping onto a fresh cluster
 ```
 kubectl apply -f bootstrap/app-of-apps.yaml

@@ -1,0 +1,107 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openldap
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://jp-gouin.github.io/helm-openldap/
+    chart: openldap
+    targetRevision: 2.0.4
+    helm:
+      values: |
+        # Single instance -- homelab scale, avoids the chart's default
+        # 3-way replication complexity. Same reasoning as MinIO's
+        # standalone mode.
+        replicaCount: 1
+        # Chart defaults this to true regardless of replicaCount, which
+        # renders a self-referential syncrepl config (the one replica
+        # pointed at itself). Confirmed via helm template: leaving it
+        # enabled here produces LDAP_REPLICATION_HOSTS listing only the
+        # pod's own headless DNS name. Disabled since there's nothing to
+        # replicate to.
+        replication:
+          enabled: false
+
+        # Pinned via a SealedSecret (openldap-secrets app). The chart
+        # writes LDAP_ADMIN_PASSWORD/LDAP_CONFIG_PASSWORD into a plain
+        # Secret itself when this is unset -- existingSecret skips that
+        # and points envFrom at ours instead (keys must match exactly:
+        # LDAP_ADMIN_PASSWORD, LDAP_CONFIG_PASSWORD).
+        existingSecret: openldap-credentials
+
+        env:
+          LDAP_ORGANISATION: "Homelab"
+          LDAP_DOMAIN: "homelab.local"
+          # Base DN derived from LDAP_DOMAIN: dc=homelab,dc=local
+          # Plaintext LDAP -- traffic never leaves the cluster network,
+          # same risk posture already accepted for MinIO/Grafana's
+          # internal traffic. Revisit before wiring SSSD on the NUCs.
+          LDAP_TLS: "false"
+
+        tls:
+          enabled: false
+
+        # Seeds the base structure plus one test user, for verifying the
+        # directory works end-to-end. No userPassword attribute here on
+        # purpose -- this file is a plain ConfigMap (not sealed), so a
+        # real password doesn't belong in it. Set one manually after
+        # deploy with ldappasswd, same pattern as ArgoCD's initial admin
+        # password (fetched once, never stored in git). posixAccount /
+        # posixGroup attributes are included now since they're free to
+        # seed here and the deferred SSSD/PAM phase will need them.
+        customLdifFiles:
+          01-structure.ldif: |-
+            dn: ou=people,dc=homelab,dc=local
+            objectClass: organizationalUnit
+            ou: people
+
+            dn: ou=groups,dc=homelab,dc=local
+            objectClass: organizationalUnit
+            ou: groups
+          02-testuser.ldif: |-
+            dn: cn=testuser,ou=groups,dc=homelab,dc=local
+            objectClass: posixGroup
+            cn: testuser
+            gidNumber: 10000
+
+            dn: uid=testuser,ou=people,dc=homelab,dc=local
+            objectClass: inetOrgPerson
+            objectClass: posixAccount
+            objectClass: shadowAccount
+            uid: testuser
+            cn: Test User
+            sn: User
+            uidNumber: 10000
+            gidNumber: 10000
+            homeDirectory: /home/testuser
+            loginShell: /bin/bash
+            mail: testuser@homelab.local
+
+        persistence:
+          enabled: true
+          storageClass: local-path
+          size: 1Gi
+
+        # Self-service password reset UI -- out of scope for getting the
+        # directory verified, can add later if wanted.
+        ltb-passwd:
+          enabled: false
+
+        phpldapadmin:
+          enabled: true
+          ingress:
+            enabled: true
+            hosts:
+              - phpldapadmin
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openldap
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
