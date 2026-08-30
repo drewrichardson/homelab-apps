@@ -11,10 +11,14 @@ spec:
     targetRevision: 5.4.0
     helm:
       values: |
-        # rootUser/rootPassword deliberately left unset -- the chart
-        # auto-generates secure random credentials into its own Secret
-        # rather than anything living in this values block or git. Same
-        # pattern used for Grafana's admin password.
+        # Pinned via a SealedSecret (minio-secrets app) -- letting the
+        # chart auto-generate turned out to have the same silent-rotation
+        # bug Grafana had: its random-credential template renders a
+        # different value every ArgoCD comparison, and selfHeal
+        # "corrected" the apparent drift by reapplying fresh ones each
+        # sync. Confirmed: root credentials didn't match what was
+        # recorded when this was first deployed.
+        existingSecret: minio-root-credentials
         mode: standalone
 
         persistence:
