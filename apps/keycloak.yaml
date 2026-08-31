@@ -44,6 +44,21 @@ spec:
           ingressClassName: traefik
           hostname: keycloak
 
+        # The chart's default resourcesPreset ("small") caps this at
+        # 768Mi, which OOMKilled the pod on first boot -- confirmed via
+        # containerStatuses.lastState (exitCode 137, reason OOMKilled)
+        # partway through Liquibase's schema migration. Node has 15.7Gi
+        # allocatable and was at 4% usage, so headroom isn't the
+        # constraint -- the preset just doesn't fit a real Keycloak 26
+        # first-boot footprint. Explicit resources override the preset.
+        resources:
+          requests:
+            cpu: 500m
+            memory: 768Mi
+          limits:
+            cpu: "1"
+            memory: 1536Mi
+
         postgresql:
           enabled: true
           image:
