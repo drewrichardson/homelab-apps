@@ -11,6 +11,16 @@ spec:
     targetRevision: 25.2.0
     helm:
       values: |
+        # Bitnami moved most tags on docker.io/bitnami/* behind a paid
+        # tier in 2025, leaving only `latest` free there -- pinned
+        # version tags (needed for reproducibility) now live under the
+        # bitnamilegacy org instead. Confirmed both images 404 as
+        # docker.io/bitnami/*, and resolve fine as bitnamilegacy/*, via
+        # `docker manifest inspect`. Applies to the bundled Postgres
+        # subchart too (see postgresql.image below).
+        image:
+          repository: bitnamilegacy/keycloak
+
         auth:
           adminUser: admin
           # Pinned via a SealedSecret (keycloak-secrets app) from day
@@ -36,6 +46,8 @@ spec:
 
         postgresql:
           enabled: true
+          image:
+            repository: bitnamilegacy/postgresql
           auth:
             # Same existingSecret reasoning as above, applied to the
             # bundled Postgres subchart too. Keys must be
