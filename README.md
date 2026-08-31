@@ -109,6 +109,30 @@ regardless of `replicaCount`. At `replicaCount: 1` that renders a syncrepl confi
 pointed at itself (confirmed via `helm template` -- `LDAP_REPLICATION_HOSTS` listed only the pod's
 own headless DNS name). Explicitly disabled since there's nothing to replicate to.
 
+**Status: #1 and #2 are both deployed and verified.** `ldapsearch` against the live pod (bound as
+`cn=admin,dc=homelab,dc=local`, using the sealed credential) returns the seeded `testuser` entry with
+all its attributes intact. Keycloak returns `200` on `/realms/master` with a clean startup log. Three
+more bugs turned up getting there, all unrelated to the directory/IdP design itself:
+
+1. **`openldap`'s `phpldapadmin` Ingress is stuck on `extensions/v1beta1`**, an API group removed from
+   Kubernetes years ago. The `openldap` chart line is frozen at `2.0.4` -- upstream moved on to a
+   differently-named successor chart (`openldap-stack-ha`) instead of fixing this one. ArgoCD fails
+   the *entire* Application sync atomically on one invalid resource, so nothing in it applied at all
+   until this was found. Fixed by disabling just that ingress (`phpldapadmin.ingress.enabled: false`);
+   `phpldapadmin` itself still deploys fine, reachable via `kubectl port-forward` for now.
+
+2. **Both `bitnami/keycloak` and its bundled `bitnami/postgresql` 404'd on `docker.io`.** Bitnami moved
+   pinned version tags behind a paid tier in 2025, leaving only `latest` free on `docker.io/bitnami/*`
+   -- older tags are mirrored to a separate `bitnamilegacy` org instead (confirmed both images exist
+   there via `docker manifest inspect`). Both `apps/keycloak.yaml`'s top-level `image.repository` and
+   `postgresql.image.repository` now point at `bitnamilegacy/*`.
+
+3. **Keycloak OOMKilled itself on first boot.** The chart's default `resourcesPreset: small` caps
+   memory at 768Mi, which isn't enough for Keycloak 26's real first-boot footprint (confirmed via
+   `containerStatuses.lastState`: exitCode 137, reason `OOMKilled`, mid-Liquibase schema migration).
+   The node had 15.7Gi allocatable at 4% usage, so this was the container's own limit, not real node
+   pressure. Fixed with an explicit `resources` block (1536Mi limit) overriding the preset.
+
 ## Bootstrapping onto a fresh cluster
 ```
 kubectl apply -f bootstrap/app-of-apps.yaml
