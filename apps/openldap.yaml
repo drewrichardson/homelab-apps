@@ -91,10 +91,21 @@ spec:
 
         phpldapadmin:
           enabled: true
+          # Ingress left off on purpose: this chart's phpldapadmin Ingress
+          # template is hardcoded to extensions/v1beta1, an API group
+          # removed from Kubernetes years ago (Ingress lives at
+          # networking.k8s.io/v1 now). The `openldap` chart line is
+          # frozen at 2.0.4 -- upstream moved on to a differently-named
+          # successor chart (openldap-stack-ha) instead of fixing this
+          # one. Confirmed via `kubectl get application openldap`: with
+          # the ingress enabled, ArgoCD fails the *entire* sync atomically
+          # on this one invalid resource, so nothing in this Application
+          # applies at all until it's off. phpldapadmin itself still
+          # deploys fine -- reachable via `kubectl port-forward` for now.
+          # Migrating to openldap-stack-ha is a real option if the
+          # ingress becomes worth having later.
           ingress:
-            enabled: true
-            hosts:
-              - phpldapadmin
+            enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: openldap
