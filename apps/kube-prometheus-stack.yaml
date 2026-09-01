@@ -37,6 +37,14 @@ spec:
           # same existingSecret reasoning as the admin password above.
           envFromSecret: grafana-oidc-credentials
           grafana.ini:
+            server:
+              # Without this, Grafana builds its OAuth redirect_uri from its
+              # own internal defaults (confirmed: it came back as
+              # http://grafana:3000/login/generic_oauth, the in-pod port --
+              # not the real ingress URL), which Keycloak then rejects since
+              # only the actual public URL is a registered redirect URI on
+              # the client.
+              root_url: http://grafana/
             auth.generic_oauth:
               enabled: true
               name: Keycloak
