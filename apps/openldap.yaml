@@ -94,14 +94,17 @@ spec:
             givenName: Drew
             uidNumber: 10001
             gidNumber: 10001
-            # Deliberately distinct from the existing local `drew` account's
-            # /home/drew on the NUCs -- this LDAP identity isn't used for SSH
-            # there yet (nsswitch is "files sss", so a same-named local
-            # account would silently shadow it anyway; see homelab's README).
-            # It's the identity for ArgoCD/Grafana SSO only, for now.
-            homeDirectory: /home/drew-ldap
+            # Full SSH migration: the local `drew` account on each NUC is
+            # renamed (not deleted) to free the username for this LDAP
+            # identity to resolve via nsswitch's "sss" source -- see
+            # homelab's README for the full cutover sequence and why it's
+            # a rename, not a delete (instant, safe rollback if anything
+            # goes wrong mid-migration).
+            homeDirectory: /home/drew
             loginShell: /bin/bash
             mail: drewrichardson2@gmail.com
+            objectClass: ldapPublicKey
+            sshPublicKey: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEJJM6pqkGdAwFpb8kvamLfQLtM+GXAZMf9SgXG5tOTe your_email@example.com
 
         persistence:
           enabled: true
