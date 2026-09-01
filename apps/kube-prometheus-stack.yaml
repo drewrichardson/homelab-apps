@@ -58,6 +58,11 @@ spec:
               # SSO connection is the same person, so grant Admin unconditionally
               # rather than building out real role-claim mapping for one user.
               role_attribute_path: "'Admin'"
+              # First attempt without this landed testuser as org role
+              # Viewer despite the literal Admin mapping above -- Grafana
+              # 13's generic_oauth provider defaults to NOT syncing org
+              # role from the IdP unless told to explicitly.
+              skip_org_role_sync: false
               allow_sign_up: true
 
         prometheus:
