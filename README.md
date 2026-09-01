@@ -133,6 +133,75 @@ more bugs turned up getting there, all unrelated to the directory/IdP design its
    The node had 15.7Gi allocatable at 4% usage, so this was the container's own limit, not real node
    pressure. Fixed with an explicit `resources` block (1536Mi limit) overriding the preset.
 
+### SSO phase 2: ArgoCD + Grafana login via Keycloak
+Goal from phase 1: verify LDAP + Keycloak core, defer wiring up the actual apps. This phase does that
+wiring for ArgoCD and Grafana -- both now log real users in through Keycloak, federated back to the
+same LDAP directory. NUC SSSD/PAM (SSH against the same LDAP) is still a separate follow-up.
+
+**ArgoCD** is configured directly in `homelab`'s Terraform (`main.tf`), not here -- Terraform already
+owns the `argo-cd` Helm release, and `argocd-cm`/`argocd-secret` are objects that release renders.
+An ArgoCD Application patching those same objects would fight this Helm release on every
+reconciliation, the exact Terraform/ArgoCD collision this repo split exists to avoid. OIDC is wired
+directly (dex disabled) since ArgoCD talks to a provider natively and dex would be a redundant hop.
+The client secret is a `sensitive` Terraform variable (`TF_VAR_argocd_oidc_client_secret`, stored in
+1Password, never committed), matching the existing MinIO backend credential pattern.
+
+**Grafana** OIDC lives here as usual, in `apps/kube-prometheus-stack.yaml` -- client secret pinned via
+SealedSecret (`kube-prometheus-stack-secrets`), injected as `GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET`.
+
+**Status: both verified with a real end-to-end login** -- not just "pods are up." Simulated the full
+browser OAuth dance with `curl` (authorize redirect -> Keycloak login form -> callback -> real session
+token/cookie), then confirmed actual authorized access (a real ArgoCD API call succeeding, Grafana's
+`/api/user` returning the right identity with the right org role) rather than stopping at "got
+redirected to a login page." That rigor is what surfaced every bug below -- none of them would show up
+just from checking that pods are `Running`.
+
+**Real bugs hit, all fixed:**
+
+1. **ArgoCD login silently didn't work at all -- zero errors, zero debug output.** The Keycloak LDAP
+   federation component (from phase 1) was created with `parentId: "homelab"` -- the realm's *name*,
+   which is what the REST API's URL path uses (`/admin/realms/homelab/...`). But a component's
+   `parentId` field needs the realm's actual internal ID, a separate random UUID (confirmed via
+   `LOGIN_ERROR` events in the server log: `realmId="4bc22b35-..."`, not `"homelab"`). Silently wrong
+   for every purpose that mattered -- `testAuthentication` still passed (that's a raw bind test, not
+   realm-scoped), so nothing about setup looked broken. Fixed by updating `parentId` to the real UUID.
+
+2. **ArgoCD RBAC denied access even with a policy that should work by the book.** `g,
+   testuser@homelab.local, role:admin` is the textbook ArgoCD RBAC example for granting an SSO user
+   admin -- and it didn't work, denied with no further detail. Never conclusively identified which
+   claim ArgoCD's enforcer actually matches against in this version; rather than keep guessing,
+   granted explicit wildcard `p,` policies plus `g,` role-grants against all three plausible subject
+   identifiers (email, the `sub` UUID, `preferred_username`) at once, which resolved it. Worth
+   revisiting to narrow down the real cause if it ever matters (e.g. adding a second real user).
+
+3. **Grafana's OAuth redirect_uri used its internal container port.** Came back as
+   `http://grafana:3000/login/generic_oauth` (confirmed by capturing the actual authorize request),
+   not the real ingress URL -- Grafana's default `root_url` template combines `[server] domain`
+   (correctly `grafana`, from `ingress.hosts`) with the default `http_port` (3000). Keycloak rejects
+   it since only the real public URL is a registered redirect URI on the client. Fixed with an
+   explicit `root_url: http://grafana/`.
+
+4. **Grafana's `role_attribute_path` evaluated to nothing.** Set to the JMESPath literal `'Admin'`
+   (the standard pattern for "everyone gets the same role") in `grafana.ini`, but debug logs
+   (`org.sync`) showed the resolved role as completely empty, falling back to `Viewer`. Root cause:
+   Grafana's own INI-value parser strips matching leading/trailing quote characters as normal INI
+   quoting convention, silently turning the quoted literal into the bare word `Admin` -- which
+   JMESPath then reads as a field lookup (finds nothing) instead of a string literal. Env vars don't
+   go through that parser, so `role_attribute_path` is set via
+   `GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH` in `env` instead, everything else stays in `grafana.ini`.
+
+5. **Grafana didn't sync the (correctly-evaluating) role at all, even after fixing #4.** Grafana 13's
+   `generic_oauth` provider defaults to *not* syncing org role from the IdP on every login unless
+   `skip_org_role_sync` is explicitly set to `false`. Without it, role is only set once at account
+   creation from `auto_assign_org_role` (default `Viewer`) and never updated again after that.
+
+**Also learned along the way, not a bug**: ArgoCD Applications sourced from this repo -- both the
+Helm-values kind (`kube-prometheus-stack`, `openldap`) and the plain-manifest kind (`*-secrets`) --
+can lag behind a fresh push by a full poll cycle even after `app-of-apps` itself shows `Synced`. A
+`kubectl annotate application <name> argocd.argoproj.io/refresh=hard` on `app-of-apps` first, *then*
+on the child Application, reliably pulls in a just-pushed commit immediately instead of waiting on
+the default poll interval -- useful when iterating on a fix and re-verifying it live.
+
 ## Bootstrapping onto a fresh cluster
 ```
 kubectl apply -f bootstrap/app-of-apps.yaml
