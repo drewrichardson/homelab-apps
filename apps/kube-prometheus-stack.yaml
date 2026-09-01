@@ -31,6 +31,27 @@ spec:
             storageClassName: local-path
             size: 1Gi
 
+          # SSO via Keycloak (see homelab-apps' openldap/keycloak Applications).
+          # Client secret pinned via SealedSecret (kube-prometheus-stack-secrets
+          # app), injected as an env var rather than in grafana.ini directly --
+          # same existingSecret reasoning as the admin password above.
+          envFromSecret: grafana-oidc-credentials
+          grafana.ini:
+            auth.generic_oauth:
+              enabled: true
+              name: Keycloak
+              client_id: grafana
+              scopes: openid profile email
+              auth_url: http://keycloak/realms/homelab/protocol/openid-connect/auth
+              token_url: http://keycloak/realms/homelab/protocol/openid-connect/token
+              api_url: http://keycloak/realms/homelab/protocol/openid-connect/userinfo
+              login_attribute_path: preferred_username
+              # Single-operator homelab -- anyone who can authenticate via this
+              # SSO connection is the same person, so grant Admin unconditionally
+              # rather than building out real role-claim mapping for one user.
+              role_attribute_path: "'Admin'"
+              allow_sign_up: true
+
         prometheus:
           prometheusSpec:
             storageSpec:
