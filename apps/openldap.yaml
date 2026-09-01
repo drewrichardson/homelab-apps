@@ -78,6 +78,30 @@ spec:
             homeDirectory: /home/testuser
             loginShell: /bin/bash
             mail: testuser@homelab.local
+          03-drew.ldif: |-
+            dn: cn=drew,ou=groups,dc=homelab,dc=local
+            objectClass: posixGroup
+            cn: drew
+            gidNumber: 10001
+
+            dn: uid=drew,ou=people,dc=homelab,dc=local
+            objectClass: inetOrgPerson
+            objectClass: posixAccount
+            objectClass: shadowAccount
+            uid: drew
+            cn: Drew Richardson
+            sn: Richardson
+            givenName: Drew
+            uidNumber: 10001
+            gidNumber: 10001
+            # Deliberately distinct from the existing local `drew` account's
+            # /home/drew on the NUCs -- this LDAP identity isn't used for SSH
+            # there yet (nsswitch is "files sss", so a same-named local
+            # account would silently shadow it anyway; see homelab's README).
+            # It's the identity for ArgoCD/Grafana SSO only, for now.
+            homeDirectory: /home/drew-ldap
+            loginShell: /bin/bash
+            mail: drewrichardson2@gmail.com
 
         persistence:
           enabled: true
